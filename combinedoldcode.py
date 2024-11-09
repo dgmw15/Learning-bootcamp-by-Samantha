@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from getpass import getpass
+import streamlit as st
 from openai import OpenAI
 import google.generativeai as genai
 from ibm_watson import AssistantV2
@@ -106,78 +106,126 @@ class ClarifaiProvider(AIProvider):
         )
         return response.json()['outputs'][0]['data']['text']['raw']
 
-# Setup and Main Logic
-def setup_ai_provider():
-    print("\nAvailable AI Providers:")
-    print("1. OpenAI")
-    print("2. Google Gemini")
-    print("3. IBM Watson")
-    print("4. DeepAI")
-    print("5. Clarifai")
-    
-    choice = input("\nSelect your AI provider (1-5): ")
-    
-    if choice == "1":
-        api_key = getpass("Enter your OpenAI API Key: ")
-        return OpenAIProvider(api_key)
-    
-    elif choice == "2":
-        api_key = getpass("Enter your Google API Key: ")
-        return GeminiProvider(api_key)
-    
-    elif choice == "3":
-        api_key = getpass("Enter your IBM Watson API Key: ")
-        assistant_id = input("Enter your Assistant ID: ")
-        service_url = input("Enter your Service URL: ")
-        return WatsonProvider(api_key, assistant_id, service_url)
-    
-    elif choice == "4":
-        api_key = getpass("Enter your DeepAI API Key: ")
-        return DeepAIProvider(api_key)
-    
-    elif choice == "5":
-        api_key = getpass("Enter your Clarifai API Key: ")
-        user_id = input("Enter your User ID: ")
-        app_id = input("Enter your App ID: ")
-        model_id = input("Enter your Model ID: ")
-        return ClarifaiProvider(api_key, user_id, app_id, model_id)
-    
-    else:
-        print("Invalid choice. Using OpenAI as default.")
-        api_key = getpass("Enter your OpenAI API Key: ")
-        return OpenAIProvider(api_key)
+def initialize_session_state():
+    """Initialize session state variables"""
+    if 'conversation_history' not in st.session_state:
+        st.session_state.conversation_history = []
+    if 'ai_provider' not in st.session_state:
+        st.session_state.ai_provider = None
 
-if __name__ == "__main__":
-    # Setup AI provider
-    ai_provider = setup_ai_provider()
+def setup_ai_provider():
+    """Setup AI provider with Streamlit interface"""
+    st.sidebar.title("AI Provider Setup")
     
-    # Initialize conversation history
-    conversation_history = []
+    provider_choice = st.sidebar.selectbox(
+        "Select AI Provider",
+        ["OpenAI", "Google Gemini", "IBM Watson", "DeepAI", "Clarifai"],
+        index=0
+    )
     
-    # Initial instruction
-    print("\nWelcome! You can start your conversation. To end the conversation, simply say 'thank you'.")
-    
-    while True:
-        prompt = input("\nYou: ")
+    with st.sidebar.form("credentials_form"):
+        if provider_choice == "OpenAI":
+            api_key = st.text_input("OpenAI API Key", type="password")
+            if st.form_submit_button("Connect"):
+                try:
+                    st.session_state.ai_provider = OpenAIProvider(api_key)
+                    st.success("Successfully connected to OpenAI!")
+                except Exception as e:
+                    st.error(f"Error connecting to OpenAI: {str(e)}")
         
-        # Check if user wants to end conversation
-        if prompt.lower() in ["thank you", "thanks"]:
-            print("Assistant: You're welcome! Goodbye!")
-            break
+        elif provider_choice == "Google Gemini":
+            api_key = st.text_input("Google API Key", type="password")
+            if st.form_submit_button("Connect"):
+                try:
+                    st.session_state.ai_provider = GeminiProvider(api_key)
+                    st.success("Successfully connected to Gemini!")
+                except Exception as e:
+                    st.error(f"Error connecting to Gemini: {str(e)}")
         
+        elif provider_choice == "IBM Watson":
+            api_key = st.text_input("IBM Watson API Key", type="password")
+            assistant_id = st.text_input("Assistant ID")
+            service_url = st.text_input("Service URL")
+            if st.form_submit_button("Connect"):
+                try:
+                    st.session_state.ai_provider = WatsonProvider(api_key, assistant_id, service_url)
+                    st.success("Successfully connected to IBM Watson!")
+                except Exception as e:
+                    st.error(f"Error connecting to IBM Watson: {str(e)}")
+        
+        elif provider_choice == "DeepAI":
+            api_key = st.text_input("DeepAI API Key", type="password")
+            if st.form_submit_button("Connect"):
+                try:
+                    st.session_state.ai_provider = DeepAIProvider(api_key)
+                    st.success("Successfully connected to DeepAI!")
+                except Exception as e:
+                    st.error(f"Error connecting to DeepAI: {str(e)}")
+        
+        elif provider_choice == "Clarifai":
+            api_key = st.text_input("Clarifai API Key", type="password")
+            user_id = st.text_input("User ID")
+            app_id = st.text_input("App ID")
+            model_id = st.text_input("Model ID")
+            if st.form_submit_button("Connect"):
+                try:
+                    st.session_state.ai_provider = ClarifaiProvider(api_key, user_id, app_id, model_id)
+                    st.success("Successfully connected to Clarifai!")
+                except Exception as e:
+                    st.error(f"Error connecting to Clarifai: {str(e)}")
+
+def display_conversation():
+    """Display the conversation history"""
+    for message in st.session_state.conversation_history:
+        if message["role"] == "user":
+            st.write(f"You: {message['content']}")
+        else:
+            st.write(f"Assistant: {message['content']}")
+
+def main():
+    st.title("Multi-AI Provider Chat Interface")
+    
+    # Initialize session state
+    initialize_session_state()
+    
+    # Setup AI provider in sidebar
+    setup_ai_provider()
+    
+    # Main chat interface
+    st.write("Welcome! Start your conversation below.")
+    
+    # Display conversation history
+    display_conversation()
+    
+    # Chat input
+    user_input = st.text_input("Your message:", key="user_input")
+    
+    # Process user input
+    if st.button("Send") and user_input:
+        if st.session_state.ai_provider is None:
+            st.error("Please set up an AI provider first!")
+            return
+            
         # Add user message to conversation history
-        conversation_history.append({"role": "user", "content": prompt})
+        st.session_state.conversation_history.append({"role": "user", "content": user_input})
         
         try:
             # Get response from AI provider
-            ai_response = ai_provider.get_completion(conversation_history)
+            ai_response = st.session_state.ai_provider.get_completion(st.session_state.conversation_history)
             
             # Add assistant's response to conversation history
-            conversation_history.append({"role": "assistant", "content": ai_response})
+            st.session_state.conversation_history.append({"role": "assistant", "content": ai_response})
             
-            print(f"Assistant: {ai_response}")
-            print("\n(Continue asking questions or say 'thank you' to end the conversation)")
+            # Clear the input box (requires a rerun)
+            st.experimental_rerun()
             
         except Exception as e:
-            print(f"Error: {str(e)}")
-            print("Please try again or say 'thank you' to end the conversation") 
+            st.error(f"Error: {str(e)}")
+    
+    # Clear chat button
+    if st.button("Clear Chat"):
+        st.session_state.conversation_history = []
+        st.experimental_rerun()
+
+if __name__ == "__main__":
+    main()
